@@ -134,12 +134,29 @@ bool load_config(const std::string& filename, Config& config) {
         LOG_WARN("Config file not found: " + filename + ", using defaults");
         return false;
     }
-    
     try {
         json j;
         file >> j;
-        if (j.contains("port")) config.port = j["port"];
-        if (j.contains("enable_fdqc")) config.enable_fdqc = j["enable_fdqc"];
+        if (j.contains("port") && j["port"].is_number_integer()) {
+            int p = j["port"];
+            if (p > 0 && p <= 65535) config.port = p;
+            else LOG_WARN("Invalid port in config, keeping default");
+        }
+        if (j.contains("host") && j["host"].is_string()) {
+            // store host in a new field
+            // extend Config to include host
+            // config.host = j["host"];
+        }
+        if (j.contains("max_connections") && j["max_connections"].is_number_integer()) {
+            int mc = j["max_connections"];
+            if (mc > 0) g_config.max_connections = mc;
+            else LOG_WARN("Invalid max_connections, keeping default");
+        }
+        if (j.contains("log_file") && j["log_file"].is_string()) {
+            // re-init logger to new path if needed
+            // Logger::init(j["log_file"]);
+        }
+        if (j.contains("enable_fdqc")) config.enable_fdqc = j["enable_fdqc"].get<bool>();
         LOG_INFO("Configuration loaded from: " + filename);
         return true;
     } catch (const std::exception& e) {
