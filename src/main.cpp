@@ -194,7 +194,6 @@ HttpResponse handle_change_request(const HttpRequest& req) {
         json request_json = json::parse(req.body);
         
         std::string file_path = request_json.value("file_path", "");
-        std::string old_content = request_json.value("old_content", "");
         std::string new_content = request_json.value("new_content", "");
         std::string author = request_json.value("author", "anonymous");
         std::string intent = request_json.value("intent", "");
