@@ -332,14 +332,29 @@ HttpResponse route_request(const HttpRequest& req) {
         resp.body = json({{"error","not found"}}).dump();
         return resp;
     }
+}
 
-            HttpResponse resp = route_request(req);
-            std::string response = format_http_response(resp);
-            write(client_socket, response.c_str(), response.size());
-        } catch (const std::exception& e) {
-            LOG_ERROR("Error: " + std::string(e.what()));
+// New: properly defined client handler
+static void handle_client(int client_socket) {
+    try {
+        // Read request
+        std::string raw;
+        char buffer[8192];
+        ssize_t n;
+        while ((n = ::read(client_socket, buffer, sizeof(buffer))) > 0) {
+            raw.append(buffer, buffer + n);
+            // Stop if we've received end of headers and Content-Length satisfied
+            // Minimal approach: break on connection close; production code should parse Content-Length.
+            if (n < static_cast<ssize_t>(sizeof(buffer))) break;
         }
-    close(client_socket);
+        HttpRequest req = parse_http_request(raw);
+        HttpResponse resp = route_request(req);
+        std::string response = format_http_response(resp);
+        ::write(client_socket, response.c_str(), response.size());
+    } catch (const std::exception& e) {
+        LOG_ERROR("Error: " + std::string(e.what()));
+    }
+    ::close(client_socket);
 }
 
 void run_server() {
