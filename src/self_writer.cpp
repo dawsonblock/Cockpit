@@ -100,7 +100,7 @@ static void validate_path(const std::string &path) {
 
     // Disallow symlinks along the path components beneath the root
     std::filesystem::path cur = canonical_root;
-    for (const auto ∂ : rel) {
+    for (const auto &part : rel) {
         cur /= part;
         std::error_code ec2;
         if (std::filesystem::is_symlink(cur, ec2)) {

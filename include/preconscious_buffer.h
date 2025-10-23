@@ -22,6 +22,7 @@
 #include <chrono>
 #include <memory>
 #include <cmath>
+#include <mutex>
 
 namespace preconscious_buffer {
 
@@ -106,6 +107,7 @@ public:
 private:
     std::deque<BufferEntry> buffer_;
     BufferStats stats_;
+    mutable std::mutex mutex_;  // Thread safety
     
     // Helper: compute cosine similarity
     static double cosine_similarity(const std::vector<double>& a,

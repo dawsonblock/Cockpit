@@ -276,14 +276,15 @@ void test_importance_gated_consolidation() {
     // Test Case 2: High importance items should consolidate
     std::cout << "\nTest Case 2: High importance (>= 0.5, should consolidate)" << std::endl;
     
-    buffer = PreConsciousBuffer();  // Reset
+    // Create new buffer instance for fresh test
+    PreConsciousBuffer buffer2;
     
     for (int i = 0; i < 5; ++i) {
         auto emb = create_embedding(i * 0.1);
-        buffer.push(emb, "high_importance_" + std::to_string(i), 0.7);  // High salience
+        buffer2.push(emb, "high_importance_" + std::to_string(i), 0.7);  // High salience
     }
     
-    auto high_imp_items = buffer.get_salient_entries(0.5);
+    auto high_imp_items = buffer2.get_salient_entries(0.5);
     std::cout << "  High salience items: " << high_imp_items.size() << " (expected: 5)" << std::endl;
     
     bool high_passed = (high_imp_items.size() == 5);
@@ -293,15 +294,16 @@ void test_importance_gated_consolidation() {
     // Test Case 3: Mixed importance
     std::cout << "\nTest Case 3: Mixed importance (selective consolidation)" << std::endl;
     
-    buffer = PreConsciousBuffer();  // Reset
+    // Create new buffer instance for fresh test
+    PreConsciousBuffer buffer3;
     
     for (int i = 0; i < 10; ++i) {
         auto emb = create_embedding(i * 0.1);
         double salience = (i % 2 == 0) ? 0.7 : 0.3;  // Alternate high/low
-        buffer.push(emb, "mixed_" + std::to_string(i), salience);
+        buffer3.push(emb, "mixed_" + std::to_string(i), salience);
     }
     
-    auto mixed_items = buffer.get_salient_entries(0.5);
+    auto mixed_items = buffer3.get_salient_entries(0.5);
     std::cout << "  High salience items: " << mixed_items.size() << " (expected: 5)" << std::endl;
     
     bool mixed_ok = (mixed_items.size() == 5);

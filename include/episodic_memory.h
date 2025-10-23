@@ -20,6 +20,7 @@
 #include <utility>
 #include <chrono>
 #include <cmath>
+#include <mutex>
 
 namespace episodic_memory {
 
@@ -122,6 +123,7 @@ public:
 private:
     std::vector<Episode> episodes_;
     MemoryStats stats_;
+    mutable std::mutex mutex_;  // Thread safety
     
     // Helper: compute cosine similarity
     static double cosine_similarity(const std::vector<double>& a,

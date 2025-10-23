@@ -19,6 +19,8 @@ void EpisodicMemory::record(const std::vector<double>& embedding,
                             const std::string& metadata,
                             double importance,
                             double affective_valence) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
     // Create new episode
     Episode episode(embedding, metadata, importance, affective_valence);
     
@@ -48,6 +50,7 @@ void EpisodicMemory::record(const std::vector<float>& embedding,
 std::vector<RetrievalResult> EpisodicMemory::retrieve(
     const std::vector<double>& query_embedding,
     size_t k) const {
+    std::lock_guard<std::mutex> lock(mutex_);
     
     if (episodes_.empty()) {
         return {};
