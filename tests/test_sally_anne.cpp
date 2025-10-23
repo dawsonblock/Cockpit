@@ -261,18 +261,12 @@ void test_belief_confidence_decay() {
     // Simulate passage of time without updates
     std::cout << "Simulating belief without reinforcement:\n";
     
-    for (int i = 1; i <= 5; ++i) {
-        // Get current belief
-        if (tom.has_agent("test_agent")) {
-            const auto& agent = tom.get_agent("test_agent");
-            double confidence = agent.current_belief.confidence;
-            std::cout << "  After " << i << " cycles: confidence = " 
-                      << std::fixed << std::setprecision(3) << confidence << "\n";
-        }
-        
-        // Trigger decay (in real system, this happens automatically)
-        // For test, we'll just observe initial state
-        if (i == 1) break;  // Single observation sufficient
+    // Single observation of confidence without advancing time/decay
+    if (tom.has_agent("test_agent")) {
+        const auto& agent = tom.get_agent("test_agent");
+        double confidence = agent.current_belief.confidence;
+        std::cout << "  After 1 cycle: confidence = "
+                  << std::fixed << std::setprecision(3) << confidence << "\n";
     }
     
     std::cout << "\n";
