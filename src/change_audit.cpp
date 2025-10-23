@@ -578,21 +578,16 @@ static DiffResult myers_diff_lines(const std::vector<std::string>& old_lines, co
     return diff.str();
 }
 
-// Extract a crude list of symbols (function and class names) from
-// C++ source.  This is not a full parser but uses heuristics to
-// identify probable definitions.  Specifically we look for lines
-// starting with known type keywords followed by an identifier and an
-// opening parenthesis; and lines starting with the keyword `class`.
-static std::unordered_set<std::string> extract_symbols(const std::string &source) {
-    std::unordered_set<std::string> symbols;
     std::vector<std::string> lines = split_lines(source);
-    // Regex to detect C++ function definitions.  This is a heuristic
-    // that matches return type + name + parameter list.  It ignores
-    // templates, namespaces and qualifiers but is sufficient for
-    // capturing top level definitions.  Example matches:
-    //   void foo(int x) {
-    //   int Bar::baz() {
-    static const std::regex func_regex(R"(^\s*(?:inline\s+)?(?:static\s+)?(?:virtual\s+)?(?:\w+\s+)+([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*(?:const)?\s*\{?)");
+    // Require an opening brace to reduce false positives; allow trailing spaces/comments
+    static const std::regex func_def(R"(^\s*(?:inline\s+)?(?:static\s+)?(?:virtual\s+)?(?:[\w:\<\>\s\*&]+)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*(?:const\s*)?\{)");
+    static const std::regex class_def(R"(^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)\b)");
+    std::smatch m;
+    for (const auto &line : lines) {
+        if (std::regex_search(line, m, func_def)) {
+            symbols.insert(m[1]);
+        } else if (std::regex_search(line, m, class_def)) {
+            symbols.insert(m[1]);
     static const std::regex class_regex(R"(^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)\b)");
     std::smatch m;
     for (const auto &line : lines) {
