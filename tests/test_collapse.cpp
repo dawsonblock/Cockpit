@@ -3,8 +3,8 @@
 // Validation test for 10Hz state collapse frequency (alpha rhythm).
 // Measures actual collapse rate and verifies entropy-driven triggering.
 //
-// Expected: ~10 Hz ± 1 Hz (100ms ± 10ms per cycle)
-// Reference: Keil et al (1999) - Alpha rhythm in visual attention
+// Note: 10 Hz is a design parameter for entropy threshold calibration (see Keil et al 1999).
+// This test validates the entropy-driven collapse mechanism, not real-time (wall-clock) timing.
 
 #include "collapse.h"
 #include "fdqc_params.h"
