@@ -71,7 +71,14 @@ public:
         auto now = std::chrono::system_clock::now();
         auto time = std::chrono::system_clock::to_time_t(now);
         char time_buf[100];
-        std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", std::localtime(&time));
+        std::tm tm_buf{};
+        #if defined(_WIN32)
+        // On Windows, use localtime_s
+        localtime_s(&tm_buf, &time);
+        #else
+        localtime_r(&time, &tm_buf);
+        #endif
+        std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", &tm_buf);
         
         const char* level_str[] = {"DEBUG", "INFO", "WARN", "ERROR"};
         std::string log_line = std::string("[") + time_buf + "] [" + 
