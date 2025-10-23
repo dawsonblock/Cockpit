@@ -282,22 +282,51 @@ HttpResponse route_request(const HttpRequest& req) {
 }
 
 void handle_client(int client_socket) {
-    char buffer[4096];
-    ssize_t bytes_read = read(client_socket, buffer, sizeof(buffer) - 1);
+    void handle_client(int client_socket) {
+        std::string raw_request;
+        char buffer[4096];
+        ssize_t bytes_read;
     
-    if (bytes_read > 0) {
-        buffer[bytes_read] = '\0';
-        
+        // Read headers first
+        while ((bytes_read = read(client_socket, buffer, sizeof(buffer))) > 0) {
+            raw_request.append(buffer, bytes_read);
+            if (raw_request.find("\r\n\r\n") != std::string::npos) {
+                break;
+            }
+        }
+
+        if (bytes_read <= 0 && raw_request.empty()) {
+            close(client_socket);
+            return;
+        }
+
         try {
-            HttpRequest req = parse_http_request(std::string(buffer));
+            HttpRequest req = parse_http_request(raw_request);
+
+            // If there's a Content-Length, read the rest of the body
+            if (req.headers.count("Content-Length")) {
+                size_t content_length = std::stoul(req.headers["Content-Length"]);
+                size_t header_end_pos = raw_request.find("\r\n\r\n");
+                size_t body_start_pos = header_end_pos + 4;
+                size_t body_already_read = raw_request.length() - body_start_pos;
+
+                if (content_length > body_already_read) {
+                    size_t remaining_bytes = content_length - body_already_read;
+                    std::string body_buffer;
+                    body_buffer.resize(remaining_bytes);
+                    ssize_t body_bytes_read = read(client_socket, &body_buffer[0], remaining_bytes);
+                    if (body_bytes_read > 0) {
+                        req.body.append(body_buffer, body_bytes_read);
+                    }
+                }
+            }
+
             HttpResponse resp = route_request(req);
             std::string response = format_http_response(resp);
             write(client_socket, response.c_str(), response.size());
         } catch (const std::exception& e) {
             LOG_ERROR("Error: " + std::string(e.what()));
         }
-    }
-    
     close(client_socket);
 }
 
