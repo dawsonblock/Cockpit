@@ -167,8 +167,8 @@ PhenomenalReport MetaMonitor::generate_report() const {
     // Generate textual description
     report.textual_report = generate_textual_report(report.state);
     
-    // Confidence based on observation count
-    report.confidence = std::min(1.0, observations_.size() / 10.0);
+    // Confidence based on observation count (use floating point division)
+    report.confidence = std::min(1.0, static_cast<double>(observations_.size()) / 10.0);
     
     // Update statistics
     const_cast<MetaMonitor*>(this)->update_stats(report.state);
