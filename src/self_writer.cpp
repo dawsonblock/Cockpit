@@ -273,40 +273,62 @@ static void write_atomic(const std::string &path, const std::string &content) {
         if (written < 0) {
             ::close(fd);
             ::unlink(tmp_path.c_str());
-            throw std::runtime_error("Write to temporary file failed: " + tmp_path.string());
-        }
-        remaining -= static_cast<size_t>(written);
-        buf += written;
-    }
-    // Flush file contents to disk
-    if (::fsync(fd) != 0) {
-        ::close(fd);
-        ::unlink(tmp_path.c_str());
-        throw std::runtime_error("fsync on temporary file failed: " + tmp_path.string());
-    }
-    ::close(fd);
-    // Atomically replace the original file
-    if (::rename(tmp_path.c_str(), target.c_str()) != 0) {
-        ::unlink(tmp_path.c_str());
-        throw std::runtime_error("Failed to rename temporary file into place: " + std::string(::strerror(errno)));
-    }
-    // Flush the directory to ensure the rename is durable
-    int dfd = ::open(target.parent_path().c_str(), O_DIRECTORY | O_RDONLY);
-    if (dfd >= 0) {
-        ::fsync(dfd);
-        ::close(dfd);
-    }
-}
+            std::filesystem::path dir = target.parent_path();
+            std::filesystem::create_directories(dir);
 
-// Copy the original file into the snapshots directory.  Returns the
-// path of the copied snapshot or an empty string if there was no
-// original file.  The snapshot file name includes the current
-// process ID to avoid collisions when multiple processes operate on
-// the same file concurrently.
-static std::string snapshot_file(const std::string &path, const std::string &snap_dir) {
-    std::filesystem::path src{path};
-    if (!std::filesystem::exists(src)) {
-        return std::string();
+            // Create a unique temp file in the same directory to avoid cross-device rename issues
+            std::string tmpl = (dir / (target.filename().string() + ".XXXXXX")).string();
+            std::vector<char> tmpl_buf(tmpl.begin(), tmpl.end());
+            tmpl_buf.push_back('\0');
+            int fd = ::mkstemp(tmpl_buf.data());
+            if (fd < 0) {
+                throw std::runtime_error("Failed to create temporary file in target directory: " + dir.string());
+            }
+            std::string tmp_path{tmpl_buf.data()};
+
+            // Set desired permissions explicitly (e.g., 0640) in case umask differs
+            if (::fchmod(fd, 0640) != 0) {
+                ::close(fd);
+                ::unlink(tmp_path.c_str());
+                throw std::runtime_error("Failed to set permissions on temporary file: " + tmp_path);
+            }
+
+            // Write loop with short-write handling
+            const char* buf = content.data();
+            size_t remaining = content.size();
+            while (remaining > 0) {
+                ssize_t written = ::write(fd, buf, remaining);
+                if (written < 0) {
+                    if (errno == EINTR) continue;
+                    ::close(fd);
+                    ::unlink(tmp_path.c_str());
+                    throw std::runtime_error("Write to temporary file failed: " + tmp_path);
+                }
+                buf += static_cast<size_t>(written);
+                remaining -= static_cast<size_t>(written);
+            }
+
+            // Flush file contents to disk
+            if (::fsync(fd) != 0) {
+                ::close(fd);
+                ::unlink(tmp_path.c_str());
+                throw std::runtime_error("fsync on temporary file failed: " + tmp_path);
+            }
+
+            // Atomically replace the original file
+            if (::rename(tmp_path.c_str(), target.c_str()) != 0) {
+                int err = errno;
+                ::close(fd);
+                ::unlink(tmp_path.c_str());
+                throw std::runtime_error("Failed to rename temporary file into place: " + std::string(::strerror(err)));
+            }
+
+            // Close after rename to ensure no descriptor leaks
+            ::close(fd);
+
+            // Flush the directory to ensure the rename is durable
+            int dfd = ::open(dir.c_str(), O_DIRECTORY | O_RDONLY);
+            if (dfd >= 0) {
     }
     std::filesystem::create_directories(snap_dir);
     // Build snapshot name: <filename>.<pid>.bak
