@@ -434,21 +434,34 @@ ApplyResult apply_change(const std::string &path,
             throw std::runtime_error(std::string("ChangeGate strict reject: ") + oss.str());
         }
         report.explanation = expl;
-        report.explanation_errors = errs;
-    } else {
-        report.explanation = expl;
-    }
-    // Determine change log and snapshot directories from environment
-    const char *dir_env = std::getenv("CHANGE_LOG_DIR");
-    std::string change_dir = dir_env ? std::string(dir_env) : std::string("logs/changes");
-    std::string snapshot_dir = change_dir + "/snapshots";
-    // Initialise cross‑process lock if necessary
-    if (lock_fd < 0) {
-        std::filesystem::create_directories(change_dir);
-        std::string lock_path = change_dir + "/apply.lock";
-        int fd_tmp = ::open(lock_path.c_str(), O_CREAT | O_RDWR, 0640);
-        if (fd_tmp >= 0) {
+        // Initialise cross‑process lock if necessary (race-safe)
+        if (lock_fd < 0) {
+            std::filesystem::create_directories(change_dir);
+            std::string lock_path = change_dir + "/apply.lock";
+            int fd_tmp = ::open(lock_path.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0640);
+            if (fd_tmp < 0) {
+                throw std::runtime_error("Failed to open lock file: " + lock_path);
+            }
+            // Publish the fd once ready
             lock_fd = fd_tmp;
+        }
+
+        // RAII guard to ensure lock release on all exits
+        struct FlockGuard {
+            int fd;
+            bool locked{false};
+            explicit FlockGuard(int f) : fd(f) {
+                if (::flock(fd, LOCK_EX) != 0) {
+                    throw std::runtime_error("Failed to acquire cross‑process lock");
+                }
+                locked = true;
+            }
+            ~FlockGuard() {
+                if (locked) {
+                    ::flock(fd, LOCK_UN);
+                }
+            }
+        } flock_guard(lock_fd);
         }
     }
     // Acquire exclusive file lock across processes before snapshot and write
