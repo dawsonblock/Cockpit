@@ -370,10 +370,19 @@ void run_server() {
         LOG_ERROR("Failed to create socket");
         return;
     }
-    
     int opt = 1;
     setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-    
+    #ifdef SO_REUSEPORT
+    setsockopt(server_socket, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
+    #endif
+    // Optional: disable Nagle for responsiveness on accepted sockets (apply per-connection as well)
+    // int one = 1; setsockopt(server_socket, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+    // Set a short accept timeout to allow responsive shutdown
+    struct timeval tv;
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    setsockopt(server_socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
     sockaddr_in server_addr{};
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
