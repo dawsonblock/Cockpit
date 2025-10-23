@@ -457,32 +457,33 @@ static bool sign_ed25519(const std::string &message,
                          const std::string &privkey_hex,
                          std::string &signature_out,
                          std::string &pubkey_hex_out) {
-    // Decode private key
     std::vector<unsigned char> priv_bytes;
     if (!hex_decode(privkey_hex, priv_bytes) || priv_bytes.size() != 32) {
         return false;
     }
-    // Create a private key object
     EVP_PKEY *pkey = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, nullptr,
                                                   priv_bytes.data(), priv_bytes.size());
     if (!pkey) {
+        // zeroize before returning
+        OPENSSL_cleanse(priv_bytes.data(), priv_bytes.size());
         return false;
     }
-    // Extract the public key
     unsigned char pubbuf[32];
     size_t pub_len = sizeof(pubbuf);
     if (EVP_PKEY_get_raw_public_key(pkey, pubbuf, &pub_len) != 1) {
+        OPENSSL_cleanse(priv_bytes.data(), priv_bytes.size());
         EVP_PKEY_free(pkey);
         return false;
     }
     pubkey_hex_out = hex_encode(pubbuf, pub_len);
-    // Create a signing context
     EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(pkey, nullptr);
     if (!ctx) {
+        OPENSSL_cleanse(priv_bytes.data(), priv_bytes.size());
         EVP_PKEY_free(pkey);
         return false;
     }
     if (EVP_PKEY_sign_init(ctx) != 1) {
+        OPENSSL_cleanse(priv_bytes.data(), priv_bytes.size());
         EVP_PKEY_CTX_free(ctx);
         EVP_PKEY_free(pkey);
         return false;
@@ -490,6 +491,7 @@ static bool sign_ed25519(const std::string &message,
     size_t siglen = 0;
     if (EVP_PKEY_sign(ctx, nullptr, &siglen,
                       reinterpret_cast<const unsigned char *>(message.data()), message.size()) != 1) {
+        OPENSSL_cleanse(priv_bytes.data(), priv_bytes.size());
         EVP_PKEY_CTX_free(ctx);
         EVP_PKEY_free(pkey);
         return false;
@@ -497,11 +499,16 @@ static bool sign_ed25519(const std::string &message,
     std::vector<unsigned char> sigbuf(siglen);
     if (EVP_PKEY_sign(ctx, sigbuf.data(), &siglen,
                       reinterpret_cast<const unsigned char *>(message.data()), message.size()) != 1) {
+        OPENSSL_cleanse(priv_bytes.data(), priv_bytes.size());
+        OPENSSL_cleanse(sigbuf.data(), sigbuf.size());
         EVP_PKEY_CTX_free(ctx);
         EVP_PKEY_free(pkey);
         return false;
     }
     signature_out = hex_encode(sigbuf.data(), siglen);
+    // Zeroize sensitive buffers
+    OPENSSL_cleanse(priv_bytes.data(), priv_bytes.size());
+    OPENSSL_cleanse(sigbuf.data(), sigbuf.size());
     EVP_PKEY_CTX_free(ctx);
     EVP_PKEY_free(pkey);
     return true;
