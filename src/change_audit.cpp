@@ -551,23 +551,23 @@ static DiffResult myers_diff_lines(const std::vector<std::string>& old_lines, co
             } else {
                 res.changes.push_back({'+', new_lines[j++]});
             }
-        }
-    }
-    while (i < old_lines.size()) res.changes.push_back({'-', old_lines[i++]});
-    while (j < new_lines.size()) res.changes.push_back({'+', new_lines[j++]});
-    return res;
-}
-
-static std::string unified_diff(const std::string &old_str, const std::string &new_str, const std::string &path) {
-    std::vector<std::string> old_lines = split_lines(old_str);
-    std::vector<std::string> new_lines = split_lines(new_str);
-    
-    DiffResult result = myers_diff_lines(old_lines, new_lines);
-
-    std::stringstream diff;
-    diff << "--- a/" << path << "\n";
-    diff << "+++ b/" << path << "\n";
-    
+        static std::string unified_diff(const std::string &old_str, const std::string &new_str, const std::string &path) {
+            // Fallback: if proper diff not implemented, emit full replace hunk
+            std::stringstream diff;
+            diff << "--- a/" << path << "\n";
+            diff << "+++ b/" << path << "\n";
+            // Single hunk covering entire files
+            size_t old_lines = split_lines(old_str).size();
+            size_t new_lines = split_lines(new_str).size();
+            diff << "@@ -" << (old_lines ? 1 : 0) << "," << old_lines
+                 << " +" << (new_lines ? 1 : 0) << "," << new_lines << " @@\n";
+            // Emit deletions then additions to avoid ambiguity
+            for (const auto &line : split_lines(old_str)) {
+                diff << "-" << line << "\n";
+            }
+            for (const auto &line : split_lines(new_str)) {
+                diff << "+" << line << "\n";
+            }
     // This part would need to generate hunk headers (e.g., @@ -1,5 +1,5 @@)
     // For simplicity, we just print the changed lines.
     for (const auto& change : result.changes) {
