@@ -64,7 +64,6 @@ static int lock_fd = -1;
 // the current working directory.  Throws std::runtime_error on
 // violation.
 static void validate_path(const std::string &path) {
-    // Disallow empty paths and absolute paths
     if (path.empty()) {
         throw std::runtime_error("Path cannot be empty");
     }
@@ -72,14 +71,17 @@ static void validate_path(const std::string &path) {
     if (p.is_absolute()) {
         throw std::runtime_error("Absolute paths are not allowed: " + path);
     }
-    // Determine allowed root
-    const char *root_env = std::getenv("ALLOWED_ROOT");
-    std::filesystem::path root;
-    if (root_env && *root_env) {
-        root = std::filesystem::path(root_env);
-    } else {
-        root = std::filesystem::current_path();
+    // Reject explicit traversal components
+    for (const auto& part : p) {
+        if (part == ".." || part == ".") {
+            throw std::runtime_error("Relative traversal components are not allowed in path: " + path);
+        }
     }
+
+    const char *root_env = std::getenv("ALLOWED_ROOT");
+    std::filesystem::path root = (root_env && *root_env) ? std::filesystem::path(root_env)
+                                                         : std::filesystem::current_path();
+
     std::error_code ec;
     std::filesystem::path canonical_root = std::filesystem::weakly_canonical(root, ec);
     if (ec) {
@@ -89,60 +91,44 @@ static void validate_path(const std::string &path) {
     if (ec) {
         throw std::runtime_error("Failed to canonicalise target path: " + path);
     }
-    // Ensure the full path starts with the canonical root path
-    auto root_str = canonical_root.string();
-    auto full_str = full.string();
-    if (full_str.compare(0, root_str.size(), root_str) != 0) {
+
+    // Ensure full is a descendant of canonical_root using lexically_relative
+    std::filesystem::path rel = std::filesystem::relative(full, canonical_root, ec);
+    if (ec || rel.empty() || rel.native().rfind("..", 0) == 0) {
         throw std::runtime_error("Attempt to access path outside allowed root: " + path);
     }
-    // Disallow symlinks within the path by checking each component
-    // along the path for symbolic links.  This prevents sneaking out
-    // of the root via a symlink to another location.
+
+    // Disallow symlinks along the path components beneath the root
     std::filesystem::path cur = canonical_root;
-    for (const auto &part : p) {
+    for (const auto ∂ : rel) {
         cur /= part;
         std::error_code ec2;
         if (std::filesystem::is_symlink(cur, ec2)) {
             throw std::runtime_error("Symlinks are not permitted in target path: " + cur.string());
         }
     }
-    // On Linux, perform an openat2 check with RESOLVE_BENEATH and
-    // RESOLVE_NO_SYMLINKS.  This uses the kernel to resolve the
-    // path safely relative to the allowed root directory.  If
-    // openat2 fails then the path is considered invalid.  On other
-    // platforms this step is skipped and the earlier checks suffice.
+
 #ifdef __linux__
     {
-        // Define struct open_how locally in case <linux/openat2.h> is
-        // unavailable.  The relevant fields are flags, mode and
-        // resolve.  See the Linux openat2(2) man page for details.
-        struct open_how_local {
-            uint64_t flags;
-            uint64_t mode;
-            uint64_t resolve;
-        } how;
-        how.flags = O_PATH; // open a file descriptor without access
+        struct open_how_local { uint64_t flags, mode, resolve; } how{};
+        how.flags = O_PATH;
         how.mode = 0;
-        // These constants are defined in linux/openat2.h but we
-        // provide fallbacks here.  Values are taken from Linux source.
         constexpr uint64_t RESOLVE_BENEATH = 0x00040000;
         constexpr uint64_t RESOLVE_NO_SYMLINKS = 0x00020000;
         how.resolve = RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS;
-        // Use SYS_openat2 if defined.  Some systems may define SYS_openat2 in
-        // the syscall numbers header.  If not available we skip this step.
-        #ifdef SYS_openat2
+    #ifdef SYS_openat2
         int dirfd = ::open(canonical_root.c_str(), O_PATH | O_CLOEXEC);
         if (dirfd < 0) {
             throw std::runtime_error("Failed to open allowed root: " + canonical_root.string());
         }
-        int fd = static_cast<int>(::syscall(SYS_openat2, dirfd, p.string().c_str(), &how, sizeof(how)));
+        int fd = static_cast<int>(::syscall(SYS_openat2, dirfd, rel.string().c_str(), &how, sizeof(how)));
         if (fd < 0) {
             ::close(dirfd);
             throw std::runtime_error("Path resolution via openat2 failed: " + path);
         }
         ::close(fd);
         ::close(dirfd);
-        #endif
+    #endif
     }
 #endif
 }
