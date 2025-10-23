@@ -56,9 +56,12 @@ PlanResult ImaginationEngine::plan(const std::vector<double>& initial_state,
     if (all_trajectories.size() > 1) {
         double best_value = all_trajectories[0].value_estimate;
         double second_value = all_trajectories[1].value_estimate;
-        result.confidence = 1.0 / (1.0 + std::abs(best_value - second_value));
+        double gap = std::abs(best_value - second_value);
+        // Confidence approaches 1 as the gap grows, and is 0 for no gap.
+        result.confidence = 1.0 - std::exp(-gap);
     } else {
-        result.confidence = 0.5;
+        // High confidence if there's only one possible plan.
+        result.confidence = 1.0;
     }
     
     // Update statistics
