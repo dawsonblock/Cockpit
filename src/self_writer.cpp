@@ -477,7 +477,18 @@ ApplyResult apply_change(const std::string &path,
                 // Record encryption metadata on the report
                 // Derive a key identifier from environment or key bytes
                 const char *key_id_env = std::getenv("SNAPSHOT_KEY_ID");
-                std::string key_id = key_id_env && *key_id_env ? std::string(key_id_env) : hex_encode_local(key_bytes.data(), 8);
+                std::string key_id;
+                if (key_id_env && *key_id_env) {
+                    key_id = std::string(key_id_env);
+                } else {
+                    unsigned char hash[EVP_MAX_MD_SIZE];
+                    unsigned int hash_len;
+                    if (EVP_Digest(key_bytes.data(), key_bytes.size(), hash, &hash_len, EVP_sha256(), nullptr)) {
+                        key_id = hex_encode_local(hash, 8); // Use first 8 bytes of the hash
+                    } else {
+                        key_id = "unknown_key_id_hashing_failed";
+                    }
+                }
                 report.key_id = key_id;
                 report.nonce = nonce_hex;
                 report.tag = tag_hex;
