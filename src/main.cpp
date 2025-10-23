@@ -350,13 +350,21 @@ HttpResponse route_request(const HttpRequest& req) {
                     while (req.body.size() < content_length) {
                         size_t remaining_bytes = content_length - req.body.size();
                         size_t chunk = std::min(remaining_bytes, static_cast<size_t>(sizeof(buffer)));
-                        bytes_read = read(client_socket, buffer, chunk);
-                        if (bytes_read <= 0) break;
-                        req.body.append(buffer, static_cast<size_t>(bytes_read));
-                    }
-                }
+                        server_addr.sin_family = AF_INET;
+                        // Use configured host if available; default to 0.0.0.0
+                        std::string bind_host = "0.0.0.0";
+                        // if Config has host field, prefer it:
+                        // bind_host = g_config.host;
+                        if (inet_pton(AF_INET, bind_host.c_str(), &server_addr.sin_addr) != 1) {
+                            LOG_ERROR("Invalid bind host: " + bind_host);
+                            close(server_socket);
+                            return;
+                        }
+                        server_addr.sin_port = htons(g_config.port);
 
-                HttpResponse resp = route_request(req);
+                        if (bind(server_socket, (sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+                            LOG_ERROR("Failed to bind to " + bind_host + ":" + std::to_string(g_config.port) + " (" + std::strerror(errno) + ")");
+                            close(server_socket);
                 std::string response = format_http_response(resp);
                 write(client_socket, response.c_str(), response.size());
             } catch (const std::exception& e) {
