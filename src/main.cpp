@@ -298,80 +298,14 @@ HttpResponse route_request(const HttpRequest& req) {
     } else if (req.method == "GET" && req.path == "/api/health") {
         return handle_health_check(req);
     } else if (req.method == "GET" && req.path == "/api/metrics") {
-        void handle_client(int client_socket) {
-            std::string raw_request;
-            char buffer[4096];
-            ssize_t bytes_read;
-
-            // Read headers first
-            while ((bytes_read = read(client_socket, buffer, sizeof(buffer))) > 0) {
-                raw_request.append(buffer, bytes_read);
-                if (raw_request.find("\r\n\r\n") != std::string::npos) {
-                    break;
-                }
-                // Optional cap to prevent header abuse
-                if (raw_request.size() > 64 * 1024) { // 64KB header cap
-                    close(client_socket);
-                    return;
-                }
-            }
-
-            if (bytes_read <= 0 && raw_request.empty()) {
-                close(client_socket);
-                return;
-            }
-
-            try {
-                HttpRequest req = parse_http_request(raw_request);
-
-                // If there's a Content-Length, read the rest of the body with limits
-                const size_t MAX_BODY = 5 * 1024 * 1024; // 5MB cap
-                if (req.headers.count("Content-Length")) {
-                    const std::string& cl_hdr = req.headers["Content-Length"];
-                    // Validate numeric content-length
-                    if (!std::all_of(cl_hdr.begin(), cl_hdr.end(), ::isdigit)) {
-                        throw std::runtime_error("Invalid Content-Length");
-                    }
-                    size_t content_length = std::stoul(cl_hdr);
-                    if (content_length > MAX_BODY) {
-                        throw std::runtime_error("Body too large");
-                    }
-
-                    size_t header_end_pos = raw_request.find("\r\n\r\n");
-                    size_t body_start_pos = header_end_pos == std::string::npos ? raw_request.size() : header_end_pos + 4;
-                    size_t body_already_read = raw_request.length() > body_start_pos ? (raw_request.length() - body_start_pos) : 0;
-
-                    // Copy any already-read body bytes into req.body
-                    if (body_already_read > 0) {
-                        req.body.assign(raw_request.data() + body_start_pos, body_already_read);
-                    }
-
-                    // Read remaining bytes if needed
-                    while (req.body.size() < content_length) {
-                        size_t remaining_bytes = content_length - req.body.size();
-                        size_t chunk = std::min(remaining_bytes, static_cast<size_t>(sizeof(buffer)));
-                        server_addr.sin_family = AF_INET;
-                        // Use configured host if available; default to 0.0.0.0
-                        std::string bind_host = "0.0.0.0";
-                        // if Config has host field, prefer it:
-                        // bind_host = g_config.host;
-                        if (inet_pton(AF_INET, bind_host.c_str(), &server_addr.sin_addr) != 1) {
-                            LOG_ERROR("Invalid bind host: " + bind_host);
-                            close(server_socket);
-                            return;
-                        }
-                        server_addr.sin_port = htons(g_config.port);
-
-                        if (bind(server_socket, (sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-                            LOG_ERROR("Failed to bind to " + bind_host + ":" + std::to_string(g_config.port) + " (" + std::strerror(errno) + ")");
-                            close(server_socket);
-                std::string response = format_http_response(resp);
-                write(client_socket, response.c_str(), response.size());
-            } catch (const std::exception& e) {
-                LOG_ERROR("Error: " + std::string(e.what()));
-            }
-            close(client_socket);
-            }
+        return handle_metrics(req);
+    } else {
+        HttpResponse resp;
+        resp.status_code = 404;
+        resp.status_message = "Not Found";
+        resp.body = json({{"error","not found"}}).dump();
+        return resp;
+    }
 
             HttpResponse resp = route_request(req);
             std::string response = format_http_response(resp);
