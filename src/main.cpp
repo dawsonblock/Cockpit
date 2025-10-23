@@ -158,11 +158,20 @@ HttpRequest parse_http_request(const std::string& raw) {
         line_stream >> req.method >> req.path;
     }
     
+    size_t header_count = 0;
+    const size_t MAX_HEADERS = 100;
     while (std::getline(stream, line) && line != "\r") {
+        if (++header_count > MAX_HEADERS) {
+            throw std::runtime_error("Too many headers");
+        }
         size_t colon = line.find(':');
         if (colon != std::string::npos) {
             std::string key = line.substr(0, colon);
-            std::string value = line.substr(colon + 2);
+            // Skip leading whitespace in value
+            size_t value_start = line.find_first_not_of(" \t", colon + 1);
+            if (value_start == std::string::npos) continue;
+            
+            std::string value = line.substr(value_start);
             if (!value.empty() && value.back() == '\r') {
                 value.pop_back();
             }
