@@ -85,8 +85,10 @@ EvaluationResult FDQCSystem::evaluate_change(const ChangeContext& context) {
     // 11. Generate reasoning
     result.reasoning = generate_reasoning(context, result);
     
-    // 12. Generate phenomenal report
-    result.phenomenal_experience = meta_.generate_report().textual_report;
+    // 12. Generate phenomenal report (avoid multiple implicit state mutations)
+    const auto report = meta_.generate_report();
+    result.phenomenal_experience = report.textual_report;
+    // If needed elsewhere, reuse `report.state` and `report.observation` without re-calling.
     
     // 13. Store in episodic memory if significant
     double importance = (result.epistemic_risk + std::abs(result.emotional_valence)) / 2.0;
