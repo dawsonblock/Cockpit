@@ -19,6 +19,8 @@ namespace preconscious_buffer {
 void PreConsciousBuffer::push(const std::vector<double>& embedding,
                               const std::string& content,
                               double salience) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
     // Check for similar recent entry (deduplication)
     bool is_duplicate = false;
     
@@ -71,6 +73,7 @@ void PreConsciousBuffer::push(const std::string& entry) {
 std::vector<size_t> PreConsciousBuffer::find_similar(
     const std::vector<double>& query_embedding,
     double threshold) const {
+    std::lock_guard<std::mutex> lock(mutex_);
     
     std::vector<size_t> results;
     
