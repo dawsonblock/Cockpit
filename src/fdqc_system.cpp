@@ -240,29 +240,25 @@ double FDQCSystem::assess_explanation_quality(const ChangeContext& context) {
 double FDQCSystem::compute_epistemic_risk(const ChangeContext& context) {
     // Compute risk/novelty of proposed change
     
-    double risk = 0.0;
-    
     // Size of change (larger = more risk)
     size_t current_size = context.current_content.size();
     size_t proposed_size = context.proposed_content.size();
     double size_diff = std::abs(static_cast<int>(proposed_size) - 
                                 static_cast<int>(current_size));
     double size_ratio = size_diff / std::max(1.0, static_cast<double>(current_size));
-    
-    risk += std::min(0.5, size_ratio);
+    double size_risk = std::min(1.0, size_ratio / 10.0); // Normalize, e.g., 10x change is max risk
     
     // Lack of explanation increases risk
-    if (context.explanation.empty()) {
-        risk += 0.3;
-    }
+    double explanation_risk = context.explanation.empty() ? 1.0 : 0.0;
     
     // Unknown author increases risk
-    if (context.author.empty() || context.author == "unknown") {
-        risk += 0.2;
-    }
+    double author_risk = (context.author.empty() || context.author == "unknown") ? 1.0 : 0.0;
     
-    // Clamp to [0, 1]
-    return std::max(0.0, std::min(1.0, risk));
+    // Weighted average of risk components
+    // Weights: size (50%), explanation (30%), author (20%)
+    double total_risk = size_risk * 0.5 + explanation_risk * 0.3 + author_risk * 0.2;
+    
+    return total_risk;
 }
 
 //===========================================================================
